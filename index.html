@@ -582,7 +582,7 @@ function syncData() {
           return; // bỏ qua cái sau
         }
 
-        newContainers[key] = { id, row: r[1], tier: r[2], bay: r[3], type: r[4], cond: r[5], cust: r[6], note: r[7] };
+        newContainers[key] = { id, row: r[1], tier: r[2], bay: r[3], type: r[4], cond: r[5], cust: r[6], note: r[7], datetimeIn: r[8] || '' };
       });
 
       containers = newContainers;
@@ -607,8 +607,8 @@ function syncData() {
 
 function pushData() {
   if (!SCRIPT_URL) return;
-  const rows = [['ID','Row','Tier','Bay','Type','Cond','Customer','Note']];
-  Object.values(containers).forEach(c => rows.push([c.id,c.row,c.tier,c.bay,c.type,c.cond,c.cust||'',c.note||'']));
+  const rows = [['ID','Row','Tier','Bay','Type','Cond','Customer','Note','DateTimeIn']];
+  Object.values(containers).forEach(c => rows.push([c.id,c.row,c.tier,c.bay,c.type,c.cond,c.cust||'',c.note||'',c.datetimeIn||'']));
   fetch(SCRIPT_URL + '?action=save&data=' + encodeURIComponent(JSON.stringify(rows))).catch(()=>{});
 }
 
@@ -752,13 +752,16 @@ function renderMap() {
 
 function renderLog() {
   const el = document.getElementById('log-list');
-  if (!logs.length) { el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:24px">Chưa có thao tác nào hôm nay.</div>'; return; }
-  el.innerHTML = logs.map(l => `
+  if (!logs.length) { el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:24px">Chưa có thao tác nào.</div>'; return; }
+  el.innerHTML = logs.map(l => {
+    const dtDisplay = l.datetime ? fmtDatetime(l.datetime) : l.time;
+    return `
     <div class="log-item">
       <span class="log-badge ${l.type}">${l.type === 'in' ? 'NHẬP' : 'LẤY RA'}</span>
-      <div class="log-text">${l.id}<br><span style="color:var(--text2);font-size:11px">Dãy ${l.row} — Tầng ${l.tier} — Bay ${l.bay}${l.cust ? ' | ' + l.cust : ''}</span></div>
-      <span class="log-time">${l.time}</span>
-    </div>`).join('');
+      <div class="log-text">${l.id}<br><span style="color:var(--text2);font-size:11px">Dãy ${l.row} — T${l.tier} — B${l.bay}${l.cust ? ' | ' + l.cust : ''}</span></div>
+      <span class="log-time" style="font-size:10px;text-align:right">${dtDisplay}</span>
+    </div>`;
+  }).join('');
 }
 
 // ========================
@@ -775,6 +778,7 @@ function openModal(key) {
     <div class="info-row"><label>Loại</label><span>${c.type || '—'}</span></div>
     <div class="info-row"><label>Tình trạng</label><span>${c.cond || '—'}</span></div>
     <div class="info-row"><label>Khách hàng</label><span>${c.cust || '—'}</span></div>
+    <div class="info-row" style="grid-column:span 2"><label>📅 Ngày giờ nhập</label><span>${fmtDatetime(c.datetimeIn)}</span></div>
     ${c.note ? `<div class="info-row" style="grid-column:span 2"><label>Ghi chú</label><span>${c.note}</span></div>` : ''}
   `;
   document.getElementById('modal-out-btn').onclick = () => { confirmOut(key); };
@@ -864,7 +868,7 @@ function addContainer() {
   if (containers[key]) { showMsg(msg, 'err', `Vị trí Dãy ${row}, Tầng ${tier}, Bay ${bay} đã có container ${containers[key].id}`); return; }
   if (Object.values(containers).find(c => c.id === id)) { showMsg(msg, 'err', `Container ${id} đã tồn tại trong depot`); return; }
 
-  containers[key] = { id, type, cond, row, tier, bay, cust, note };
+  containers[key] = { id, type, cond, row, tier, bay, cust, note, datetimeIn: nowStr() };
   addLog('in', containers[key], row, tier, bay);
   saveLocal();
   pushData();
@@ -916,10 +920,24 @@ function confirmOutById(id) {
 // ========================
 // LOG
 // ========================
+function nowStr() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function fmtDatetime(str) {
+  if (!str) return '—';
+  // "2026-06-12 14:30:00" → "12/06 14:30"
+  const m = str.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  if (!m) return str;
+  return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+}
+
 function addLog(type, c, row, tier, bay) {
-  const now = new Date();
-  const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-  logs.unshift({ type, id: c.id, row, tier, bay, cust: c.cust || '', time });
+  const dt = nowStr();
+  const time = dt.slice(11,16); // HH:MM for display
+  logs.unshift({ type, id: c.id, row, tier, bay, cust: c.cust || '', time, datetime: dt });
 }
 
 // ========================
@@ -977,7 +995,7 @@ function confirmQAdd() {
   if (containers[qaddKey]) { showMsg(msg, 'err', 'Vị trí này đã có container!'); return; }
   if (Object.values(containers).find(c => c.id === id)) { showMsg(msg, 'err', `${id} đã tồn tại trong depot`); return; }
   const [row, tier, bay] = qaddKey.split('-');
-  containers[qaddKey] = { id, type, cond, row, tier: +tier, bay: +bay, cust, note: '' };
+  containers[qaddKey] = { id, type, cond, row, tier: +tier, bay: +bay, cust, note: '', datetimeIn: nowStr() };
   addLog('in', containers[qaddKey], row, tier, bay);
   saveLocal();
   pushData();
