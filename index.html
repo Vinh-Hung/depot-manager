@@ -582,7 +582,9 @@ function syncData() {
           return; // bỏ qua cái sau
         }
 
-        newContainers[key] = { id, row: r[1], tier: r[2], bay: r[3], type: r[4], cond: r[5], cust: r[6], note: r[7], datetimeIn: r[8] || '' };
+        // Giữ datetimeIn từ localStorage nếu Sheets chưa có (tránh mất dữ liệu khi Sheets cũ chưa có cột này)
+        const existingDtIn = containers[key]?.datetimeIn || '';
+        newContainers[key] = { id, row: r[1], tier: r[2], bay: r[3], type: r[4], cond: r[5], cust: r[6], note: r[7], datetimeIn: r[8] || existingDtIn };
       });
 
       containers = newContainers;
@@ -621,7 +623,7 @@ function showSyncOverlay(v) {
 // ========================
 function saveLocal() {
   localStorage.setItem('depot_containers', JSON.stringify(containers));
-  localStorage.setItem('depot_logs', JSON.stringify(logs.slice(0, 200)));
+  // Log lưu riêng qua saveLogs() — không ghi đè ở đây để tránh mất log khi sync
 }
 
 // ========================
@@ -921,9 +923,10 @@ function confirmOutById(id) {
 // LOG
 // ========================
 function nowStr() {
-  const d = new Date();
+  // Luôn dùng UTC+7 (giờ Việt Nam) bất kể thiết bị cài timezone nào
+  const d = new Date(Date.now() + 7 * 60 * 60 * 1000);
   const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
 function fmtDatetime(str) {
@@ -931,13 +934,19 @@ function fmtDatetime(str) {
   // "2026-06-12 14:30:00" → "12/06 14:30"
   const m = str.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
   if (!m) return str;
-  return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+  return `${m[3]}/${m[2]} ${m[4]}:${m[5]}`;
 }
 
 function addLog(type, c, row, tier, bay) {
   const dt = nowStr();
-  const time = dt.slice(11,16); // HH:MM for display
+  const time = dt.slice(11,16); // HH:MM
   logs.unshift({ type, id: c.id, row, tier, bay, cust: c.cust || '', time, datetime: dt });
+  // Lưu log ngay lập tức, độc lập với containers
+  saveLogs();
+}
+
+function saveLogs() {
+  localStorage.setItem('depot_logs', JSON.stringify(logs.slice(0, 500)));
 }
 
 // ========================
