@@ -302,9 +302,22 @@
 
 <!-- OCR CAMERA OVERLAY -->
 <div id="ocr-overlay">
-  <div id="ocr-hint">Hướng camera vào số container, giữ thẳng và đủ sáng</div>
-  <video id="ocr-video" autoplay playsinline muted></video>
-  <canvas id="ocr-canvas"></canvas>
+  <div id="ocr-hint">📦 Hướng camera vào số container — giữ thẳng, đủ sáng</div>
+  <div style="position:relative;flex:1;overflow:hidden;">
+    <video id="ocr-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+    <!-- Viewfinder frame -->
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+      <div style="width:85%;height:22%;border:2px solid rgba(255,220,0,0.9);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,0.4);position:relative;">
+        <div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);color:rgba(255,220,0,0.9);font-size:11px;white-space:nowrap;font-weight:600;">Đặt số container vào khung này</div>
+        <!-- Corner marks -->
+        <div style="position:absolute;top:-2px;left:-2px;width:16px;height:16px;border-top:3px solid #FFD700;border-left:3px solid #FFD700;border-radius:2px 0 0 0;"></div>
+        <div style="position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-top:3px solid #FFD700;border-right:3px solid #FFD700;border-radius:0 2px 0 0;"></div>
+        <div style="position:absolute;bottom:-2px;left:-2px;width:16px;height:16px;border-bottom:3px solid #FFD700;border-left:3px solid #FFD700;border-radius:0 0 0 2px;"></div>
+        <div style="position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-bottom:3px solid #FFD700;border-right:3px solid #FFD700;border-radius:0 0 2px 0;"></div>
+      </div>
+    </div>
+  </div>
+  <canvas id="ocr-canvas" style="display:none;"></canvas>
   <div id="ocr-bar">
     <button id="btn-ocr-cancel" onclick="stopOCR()">✕ Huỷ</button>
     <button id="btn-capture" onclick="captureOCR()">📷 Chụp & nhận diện</button>
@@ -481,8 +494,8 @@
 // ========================
 const CFG = {
   rows: ['A','B','C','D','E'],
-  tiers: [1,2,3,4],
-  bays: 5
+  tiers: [1,2,3],
+  bays: 10
 };
 
 let containers = {}; // key: "A-1-3" => {id,type,cond,row,tier,bay,cust,note}
@@ -957,13 +970,84 @@ function confirmQAdd() {
 }
 
 // ========================
-// OCR — CAMERA + TESSERACT
+// OCR — CLAUDE VISION + TESSERACT FALLBACK
 // ========================
 let ocrTargetId = null;
 let ocrStream = null;
-let tesseractReady = false;
 let tesseractWorker = null;
+let tesseractReady = false;
 
+// Extract ISO container number from raw text
+function extractContainerNo(text) {
+  const raw = text.toUpperCase().replace(/O/g, '0').replace(/[^A-Z0-9]/g, ' ');
+  // Standard: 4 letters + 6 digits + 1 check digit (sometimes space before check digit)
+  const patterns = [
+    /[A-Z]{4}\d{7}/,           // TCKU1234567
+    /[A-Z]{4}\s?\d{6}\s?\d/,  // TCKU 123456 7
+    /[A-Z]{3}[UJZ]\d{6}\d/,   // Owner code (3) + category (U/J/Z) + serial + check
+  ];
+  for (const p of patterns) {
+    const m = raw.replace(/\s/g,'').match(p);
+    if (m) return m[0].replace(/\s/g,'');
+  }
+  // Relaxed: find any 4-letter + 7-digit sequence nearby
+  const m2 = raw.match(/[A-Z]{3,4}[\s]?\d{3,4}[\s]?\d{3,4}/);
+  if (m2) {
+    const candidate = m2[0].replace(/\s/g,'');
+    if (/^[A-Z]{4}\d{7}$/.test(candidate)) return candidate;
+  }
+  return null;
+}
+
+// Preprocess canvas for better OCR: grayscale + contrast boost + upscale
+function preprocessCanvas(srcCanvas) {
+  const scale = Math.min(4, 2400 / srcCanvas.width);
+  const w = Math.round(srcCanvas.width * scale);
+  const h = Math.round(srcCanvas.height * scale);
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  // Upscale
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(srcCanvas, 0, 0, w, h);
+  // Grayscale + contrast via pixel manipulation
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    // Contrast stretch: push toward black/white
+    const contrasted = gray < 128 ? Math.max(0, gray - 40) : Math.min(255, gray + 40);
+    d[i] = d[i+1] = d[i+2] = contrasted;
+  }
+  ctx.putImageData(id, 0, 0);
+  return out;
+}
+
+// Claude Vision OCR (primary)
+async function ocrWithClaude(base64jpeg) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 100,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64jpeg } },
+          { type: 'text', text: 'Find the ISO shipping container number in this image. It follows the format: 4 uppercase letters (owner code + category U/J/Z) followed by 6 digits and 1 check digit, total 11 characters. Examples: TCKU1234567, MSCU9876543, TEMU0012345. Reply with ONLY the container number, nothing else. If not found, reply: NOT_FOUND' }
+        ]
+      }]
+    })
+  });
+  const data = await resp.json();
+  const text = data?.content?.[0]?.text?.trim() || '';
+  if (text === 'NOT_FOUND' || !text) return null;
+  return extractContainerNo(text) || ((/^[A-Z]{4}\d{7}$/.test(text)) ? text : null);
+}
+
+// Tesseract fallback
 async function loadTesseract() {
   if (tesseractReady) return true;
   if (!window.Tesseract) {
@@ -974,23 +1058,25 @@ async function loadTesseract() {
       document.head.appendChild(s);
     });
   }
-  tesseractWorker = await Tesseract.createWorker('eng', 1, {
-    logger: () => {}
-  });
+  tesseractWorker = await Tesseract.createWorker('eng', 1, { logger: () => {} });
   await tesseractWorker.setParameters({
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-    tessedit_pageseg_mode: '7'
+    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+    tessedit_pageseg_mode: '6'  // mode 6 = assume uniform block of text
   });
   tesseractReady = true;
   return true;
 }
 
+async function ocrWithTesseract(canvas) {
+  await loadTesseract();
+  const processed = preprocessCanvas(canvas);
+  const { data: { text } } = await tesseractWorker.recognize(processed);
+  return extractContainerNo(text);
+}
+
 async function startOCR(targetInputId) {
   ocrTargetId = targetInputId;
-  const statusId = targetInputId === 'i-id' ? 'ocr-status-main' : 'ocr-status-qa';
-  const statusEl = document.getElementById(statusId);
-  if (statusEl) statusEl.textContent = '';
-
+  setOcrStatus('');
   try {
     ocrStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
@@ -1005,15 +1091,22 @@ async function startOCR(targetInputId) {
 function stopOCR() {
   if (ocrStream) { ocrStream.getTracks().forEach(t => t.stop()); ocrStream = null; }
   document.getElementById('ocr-overlay').classList.remove('open');
-  document.getElementById('btn-capture').textContent = '📷 Chụp & nhận diện';
-  document.getElementById('btn-capture').disabled = false;
+  const btn = document.getElementById('btn-capture');
+  btn.textContent = '📷 Chụp & nhận diện';
+  btn.disabled = false;
+}
+
+function setOcrStatus(text) {
+  const statusId = ocrTargetId === 'i-id' ? 'ocr-status-main' : 'ocr-status-qa';
+  const el = document.getElementById(statusId);
+  if (el) el.textContent = text;
 }
 
 async function captureOCR() {
   const btn = document.getElementById('btn-capture');
-  btn.textContent = '⏳ Đang nhận diện...';
   btn.disabled = true;
 
+  // Capture frame from video
   const video = document.getElementById('ocr-video');
   const canvas = document.getElementById('ocr-canvas');
   canvas.width = video.videoWidth;
@@ -1021,37 +1114,42 @@ async function captureOCR() {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0);
 
-  // Pre-process: crop middle horizontal band where container ID typically appears
-  const cropY = Math.floor(canvas.height * 0.3);
-  const cropH = Math.floor(canvas.height * 0.4);
-  const imgData = ctx.getImageData(0, cropY, canvas.width, cropH);
-  const cropCanvas = document.createElement('canvas');
-  cropCanvas.width = canvas.width; cropCanvas.height = cropH;
-  cropCanvas.getContext('2d').putImageData(imgData, 0, 0);
+  // Convert to JPEG base64 (quality 0.92 = good balance)
+  const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
 
   try {
-    await loadTesseract();
-    const { data: { text } } = await tesseractWorker.recognize(cropCanvas);
-    // Find ISO container number: 4 uppercase letters + 7 digits (with possible space before check digit)
-    const raw = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const match = raw.match(/[A-Z]{4}\d{7}/);
-    if (match) {
+    // Primary: Claude Vision
+    btn.textContent = '🤖 Claude đang đọc...';
+    let result = null;
+    try {
+      result = await ocrWithClaude(base64);
+    } catch(e) {
+      // Claude failed (no network / API error) → fallback
+    }
+
+    // Fallback: Tesseract
+    if (!result) {
+      btn.textContent = '⏳ Tesseract đang đọc...';
+      try {
+        result = await ocrWithTesseract(canvas);
+      } catch(e) {}
+    }
+
+    if (result) {
       stopOCR();
-      const targetInput = document.getElementById(ocrTargetId);
-      if (targetInput) targetInput.value = match[0];
-      const statusId = ocrTargetId === 'i-id' ? 'ocr-status-main' : 'ocr-status-qa';
-      const statusEl = document.getElementById(statusId);
-      if (statusEl) statusEl.textContent = `✓ Nhận diện: ${match[0]}`;
-      toast(`✓ OCR: ${match[0]}`);
+      const input = document.getElementById(ocrTargetId);
+      if (input) input.value = result;
+      setOcrStatus(`✓ Nhận diện: ${result}`);
+      toast(`✓ OCR: ${result}`);
     } else {
       btn.textContent = '📷 Chụp lại';
       btn.disabled = false;
-      toast('Không nhận diện được — thử lại, đảm bảo đủ sáng');
+      toast('Không nhận diện được — giữ thẳng, đủ sáng, zoom gần số cont');
     }
   } catch(e) {
     btn.textContent = '📷 Chụp lại';
     btn.disabled = false;
-    toast('Lỗi OCR: ' + (e.message || 'thử lại'));
+    toast('Lỗi: ' + (e.message || 'thử lại'));
   }
 }
 
