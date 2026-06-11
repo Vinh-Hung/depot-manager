@@ -65,7 +65,11 @@
 
   /* === DEPOT MAP === */
   .row-block { background: var(--white); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); }
-  .row-label { font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+  .row-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .row-label { font-size: 15px; font-weight: 700; color: var(--text); }
+  .row-sublabel { font-size: 11px; color: var(--text2); margin-top: 1px; }
+  .rs-icon { flex-shrink: 0; }
+  .row-dir { font-size: 10px; color: var(--text2); background: var(--gray-l); border-radius: 6px; padding: 3px 8px; margin-left: auto; }
   .tier-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .tier-lbl { font-size: 11px; color: var(--text2); width: 36px; flex-shrink: 0; }
   .bays { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -74,6 +78,10 @@
   .bay.occ:active { background: #85B7EB; }
   .bay.sel { background: var(--blue); color: #fff; border-color: var(--blue-d); }
   .bay-num { font-size: 8px; opacity: 0.6; }
+  .bay-dir-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; padding: 0 2px; }
+  .bay-dir-arrow { flex: 1; height: 2px; background: linear-gradient(to right, var(--border), var(--amber)); border-radius: 1px; position: relative; }
+  .bay-dir-arrow::after { content: ''; position: absolute; right: -1px; top: -3px; border-left: 7px solid var(--amber); border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+  .bay-dir-label { font-size: 9px; color: var(--amber); font-weight: 600; white-space: nowrap; }
 
   /* === MODAL === */
   #modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: flex-end; justify-content: center; }
@@ -392,8 +400,8 @@
 // ========================
 const CFG = {
   rows: ['A','B','C','D','E'],
-  tiers: [1,2,3,4],
-  bays: 5
+  tiers: [1,2,3],
+  bays: 10
 };
 
 let containers = {}; // key: "A-1-3" => {id,type,cond,row,tier,bay,cust,note}
@@ -553,13 +561,51 @@ function updateStats() {
   document.getElementById('st-pct').textContent = Math.round(total / maxSlots * 100) + '%';
 }
 
+function reachStackerSVG() {
+  return `<svg width="56" height="44" viewBox="0 0 56 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- body -->
+    <rect x="2" y="22" width="28" height="16" rx="3" fill="#EF9F27" stroke="#BA7517" stroke-width="1"/>
+    <!-- cab -->
+    <rect x="22" y="15" width="12" height="10" rx="2" fill="#FAC775" stroke="#BA7517" stroke-width="1"/>
+    <!-- cab window -->
+    <rect x="24" y="17" width="8" height="6" rx="1" fill="#B5D4F4" stroke="#85B7EB" stroke-width="0.5"/>
+    <!-- mast vertical -->
+    <rect x="30" y="4" width="4" height="22" rx="1" fill="#5F5E5A" stroke="#444441" stroke-width="0.5"/>
+    <!-- boom arm -->
+    <rect x="30" y="4" width="22" height="4" rx="1" fill="#5F5E5A" stroke="#444441" stroke-width="0.5"/>
+    <!-- spreader/container grip -->
+    <rect x="46" y="8" width="8" height="12" rx="1" fill="#378ADD" stroke="#185FA5" stroke-width="1"/>
+    <!-- container on spreader -->
+    <rect x="44" y="2" width="12" height="8" rx="1" fill="#1D9E75" stroke="#0F6E56" stroke-width="1"/>
+    <!-- front wheel -->
+    <circle cx="8" cy="39" r="4" fill="#2C2C2A" stroke="#444441" stroke-width="0.5"/>
+    <circle cx="8" cy="39" r="2" fill="#888780"/>
+    <!-- rear wheel -->
+    <circle cx="24" cy="39" r="4" fill="#2C2C2A" stroke="#444441" stroke-width="0.5"/>
+    <circle cx="24" cy="39" r="2" fill="#888780"/>
+    <!-- counterweight -->
+    <rect x="0" y="24" width="6" height="10" rx="1" fill="#444441"/>
+  </svg>`;
+}
+
 function renderMap() {
   const el = document.getElementById('depot-map');
   el.innerHTML = '';
   CFG.rows.forEach(row => {
+    const occupied = Object.keys(containers).filter(k => k.startsWith(row+'-')).length;
+    const totalSlots = CFG.tiers.length * CFG.bays;
+    const pct = Math.round(occupied / totalSlots * 100);
     const block = document.createElement('div');
     block.className = 'row-block';
-    block.innerHTML = `<div class="row-label">Dãy ${row}</div>`;
+    block.innerHTML = `
+      <div class="row-header">
+        <div class="rs-icon">${reachStackerSVG()}</div>
+        <div>
+          <div class="row-label">Dãy ${row}</div>
+          <div class="row-sublabel">${occupied}/${totalSlots} slots &mdash; ${pct}%</div>
+        </div>
+        <div class="row-dir">&larr; Trong &nbsp;|&nbsp; Ngoài &rarr;</div>
+      </div>`;
     [...CFG.tiers].reverse().forEach(tier => {
       const tr = document.createElement('div');
       tr.className = 'tier-row';
@@ -583,6 +629,10 @@ function renderMap() {
       tr.appendChild(bays);
       block.appendChild(tr);
     });
+    const dirRow = document.createElement('div');
+    dirRow.className = 'bay-dir-row';
+    dirRow.innerHTML = `<span class="bay-dir-label">Bay 1 (trong)</span><div class="bay-dir-arrow"></div><span class="bay-dir-label">Bay ${CFG.bays} (ngoài)</span>`;
+    block.appendChild(dirRow);
     el.appendChild(block);
   });
 }
