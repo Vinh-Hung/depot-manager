@@ -65,7 +65,11 @@
 
   /* === DEPOT MAP === */
   .row-block { background: var(--white); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); }
-  .row-label { font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+  .row-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .row-label { font-size: 15px; font-weight: 700; color: var(--text); }
+  .row-sublabel { font-size: 11px; color: var(--text2); margin-top: 1px; }
+  .rs-icon { flex-shrink: 0; }
+  .row-dir { font-size: 10px; color: var(--text2); background: var(--gray-l); border-radius: 6px; padding: 3px 8px; margin-left: auto; }
   .tier-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .tier-lbl { font-size: 11px; color: var(--text2); width: 36px; flex-shrink: 0; }
   .bays { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -74,6 +78,10 @@
   .bay.occ:active { background: #85B7EB; }
   .bay.sel { background: var(--blue); color: #fff; border-color: var(--blue-d); }
   .bay-num { font-size: 8px; opacity: 0.6; }
+  .bay-dir-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; padding: 0 2px; }
+  .bay-dir-arrow { flex: 1; height: 2px; background: linear-gradient(to right, var(--border), var(--amber)); border-radius: 1px; position: relative; }
+  .bay-dir-arrow::after { content: ''; position: absolute; right: -1px; top: -3px; border-left: 7px solid var(--amber); border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+  .bay-dir-label { font-size: 9px; color: var(--amber); font-weight: 600; white-space: nowrap; }
 
   /* === MODAL === */
   #modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: flex-end; justify-content: center; }
@@ -143,6 +151,36 @@
   /* === TOAST === */
   #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #1a1a18; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity .3s; pointer-events: none; white-space: nowrap; }
   #toast.show { opacity: 1; }
+
+  /* === EMPTY BAY TAP === */
+  .bay.empty-tap { cursor: pointer; border-style: dashed; border-color: #b8b6af; }
+  .bay.empty-tap:active { background: var(--green-l); border-color: var(--green); }
+  .bay.empty-tap .plus-hint { font-size: 14px; opacity: 0.35; color: var(--green); line-height:1; }
+
+  /* === QUICK-ADD MODAL === */
+  #qadd-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 150; align-items: flex-end; justify-content: center; }
+  #qadd-bg.open { display: flex; }
+  #qadd-modal { background: var(--white); width: 100%; max-width: 520px; border-radius: 20px 20px 0 0; padding: 20px 20px 32px; }
+  #qadd-modal .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 14px; }
+  #qadd-modal .qadd-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  #qadd-modal .qadd-loc { font-size: 12px; color: var(--text2); margin-bottom: 14px; }
+
+  /* === OCR BUTTON === */
+  .ocr-wrap { display: flex; gap: 8px; align-items: stretch; }
+  .ocr-wrap input { flex: 1; }
+  .btn-ocr { padding: 0 14px; background: var(--blue-l); border: 1px solid #85B7EB; border-radius: var(--radius-sm); color: var(--blue); font-size: 18px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; min-width: 48px; }
+  .btn-ocr:active { background: #85B7EB; }
+  #ocr-status { font-size: 11px; color: var(--text2); margin-top: 4px; min-height: 16px; }
+
+  /* === OCR OVERLAY === */
+  #ocr-overlay { display: none; position: fixed; inset: 0; background: #000; z-index: 500; flex-direction: column; }
+  #ocr-overlay.open { display: flex; }
+  #ocr-video { width: 100%; flex: 1; object-fit: cover; }
+  #ocr-canvas { display: none; }
+  #ocr-bar { background: #111; padding: 16px 20px 28px; display: flex; gap: 12px; align-items: center; }
+  #btn-capture { flex: 1; padding: 14px; background: #fff; color: #000; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 700; cursor: pointer; }
+  #btn-ocr-cancel { padding: 14px 20px; background: #333; color: #fff; border: none; border-radius: var(--radius-sm); font-size: 15px; cursor: pointer; }
+  #ocr-hint { color: rgba(255,255,255,0.7); font-size: 12px; text-align: center; padding: 8px 20px 0; }
 
   /* === SYNC OVERLAY === */
   #sync-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 300; align-items: center; justify-content: center; flex-direction: column; gap: 12px; font-size: 14px; color: var(--text2); }
@@ -226,6 +264,53 @@
   </div>
 </div>
 
+<!-- QUICK-ADD MODAL (tap empty bay) -->
+<div id="qadd-bg">
+  <div id="qadd-modal">
+    <div class="modal-handle"></div>
+    <div class="qadd-title">Nhập container vào vị trí</div>
+    <div class="qadd-loc" id="qadd-loc">Dãy ? — Tầng ? — Bay ?</div>
+    <div class="field">
+      <label>Số container *</label>
+      <div class="ocr-wrap">
+        <input type="text" id="qa-id" placeholder="TCKU1234567" oninput="this.value=this.value.toUpperCase()" maxlength="11">
+        <button class="btn-ocr" onclick="startOCR('qa-id')" title="Chụp ảnh OCR">📷</button>
+      </div>
+      <div id="ocr-status-qa"></div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Loại container</label>
+        <select id="qa-type"><option>20'DC</option><option>40'DC</option><option selected>40'HC</option><option>45'HC</option></select>
+      </div>
+      <div class="field">
+        <label>Tình trạng</label>
+        <select id="qa-cond"><option>Empty</option><option>Full</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Khách hàng</label>
+      <input type="text" id="qa-cust" placeholder="Tên công ty (tuỳ chọn)...">
+    </div>
+    <div id="qadd-msg" class="msg"></div>
+    <div class="modal-btns" style="margin-top:12px">
+      <button class="btn-cancel" onclick="closeQAdd()">Huỷ</button>
+      <button class="btn-primary green" style="margin-top:0" onclick="confirmQAdd()">✓ Nhập vào</button>
+    </div>
+  </div>
+</div>
+
+<!-- OCR CAMERA OVERLAY -->
+<div id="ocr-overlay">
+  <div id="ocr-hint">Hướng camera vào số container, giữ thẳng và đủ sáng</div>
+  <video id="ocr-video" autoplay playsinline muted></video>
+  <canvas id="ocr-canvas"></canvas>
+  <div id="ocr-bar">
+    <button id="btn-ocr-cancel" onclick="stopOCR()">✕ Huỷ</button>
+    <button id="btn-capture" onclick="captureOCR()">📷 Chụp & nhận diện</button>
+  </div>
+</div>
+
 <!-- APP SHELL -->
 <div id="app">
   <div id="topbar">
@@ -292,7 +377,11 @@
         <h3>Nhập container vào depot</h3>
         <div class="field">
           <label>Số container *</label>
-          <input type="text" id="i-id" placeholder="TCKU1234567" oninput="this.value=this.value.toUpperCase()">
+          <div class="ocr-wrap">
+            <input type="text" id="i-id" placeholder="TCKU1234567" oninput="this.value=this.value.toUpperCase()" maxlength="11">
+            <button class="btn-ocr" onclick="startOCR('i-id')" title="Chụp ảnh OCR">📷</button>
+          </div>
+          <div id="ocr-status-main"></div>
         </div>
         <div class="field-row">
           <div class="field">
@@ -392,8 +481,8 @@
 // ========================
 const CFG = {
   rows: ['A','B','C','D','E'],
-  tiers: [1,2,3,4],
-  bays: 5
+  tiers: [1,2,3],
+  bays: 10
 };
 
 let containers = {}; // key: "A-1-3" => {id,type,cond,row,tier,bay,cust,note}
@@ -553,13 +642,51 @@ function updateStats() {
   document.getElementById('st-pct').textContent = Math.round(total / maxSlots * 100) + '%';
 }
 
+function reachStackerSVG() {
+  return `<svg width="56" height="44" viewBox="0 0 56 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- body -->
+    <rect x="2" y="22" width="28" height="16" rx="3" fill="#EF9F27" stroke="#BA7517" stroke-width="1"/>
+    <!-- cab -->
+    <rect x="22" y="15" width="12" height="10" rx="2" fill="#FAC775" stroke="#BA7517" stroke-width="1"/>
+    <!-- cab window -->
+    <rect x="24" y="17" width="8" height="6" rx="1" fill="#B5D4F4" stroke="#85B7EB" stroke-width="0.5"/>
+    <!-- mast vertical -->
+    <rect x="30" y="4" width="4" height="22" rx="1" fill="#5F5E5A" stroke="#444441" stroke-width="0.5"/>
+    <!-- boom arm -->
+    <rect x="30" y="4" width="22" height="4" rx="1" fill="#5F5E5A" stroke="#444441" stroke-width="0.5"/>
+    <!-- spreader/container grip -->
+    <rect x="46" y="8" width="8" height="12" rx="1" fill="#378ADD" stroke="#185FA5" stroke-width="1"/>
+    <!-- container on spreader -->
+    <rect x="44" y="2" width="12" height="8" rx="1" fill="#1D9E75" stroke="#0F6E56" stroke-width="1"/>
+    <!-- front wheel -->
+    <circle cx="8" cy="39" r="4" fill="#2C2C2A" stroke="#444441" stroke-width="0.5"/>
+    <circle cx="8" cy="39" r="2" fill="#888780"/>
+    <!-- rear wheel -->
+    <circle cx="24" cy="39" r="4" fill="#2C2C2A" stroke="#444441" stroke-width="0.5"/>
+    <circle cx="24" cy="39" r="2" fill="#888780"/>
+    <!-- counterweight -->
+    <rect x="0" y="24" width="6" height="10" rx="1" fill="#444441"/>
+  </svg>`;
+}
+
 function renderMap() {
   const el = document.getElementById('depot-map');
   el.innerHTML = '';
   CFG.rows.forEach(row => {
+    const occupied = Object.keys(containers).filter(k => k.startsWith(row+'-')).length;
+    const totalSlots = CFG.tiers.length * CFG.bays;
+    const pct = Math.round(occupied / totalSlots * 100);
     const block = document.createElement('div');
     block.className = 'row-block';
-    block.innerHTML = `<div class="row-label">Dãy ${row}</div>`;
+    block.innerHTML = `
+      <div class="row-header">
+        <div class="rs-icon">${reachStackerSVG()}</div>
+        <div>
+          <div class="row-label">Dãy ${row}</div>
+          <div class="row-sublabel">${occupied}/${totalSlots} slots &mdash; ${pct}%</div>
+        </div>
+        <div class="row-dir">&larr; Trong &nbsp;|&nbsp; Ngoài &rarr;</div>
+      </div>`;
     [...CFG.tiers].reverse().forEach(tier => {
       const tr = document.createElement('div');
       tr.className = 'tier-row';
@@ -576,13 +703,19 @@ function renderMap() {
           div.innerHTML = `<span>${c.id.slice(-4)}</span><span class="bay-num">B${b}</span>`;
           div.onclick = () => openModal(k);
         } else {
-          div.innerHTML = `<span class="bay-num">B${b}</span>`;
+          div.classList.add('empty-tap');
+          div.innerHTML = `<span class="plus-hint">＋</span><span class="bay-num">B${b}</span>`;
+          div.onclick = () => openQAdd(row, tier, b);
         }
         bays.appendChild(div);
       }
       tr.appendChild(bays);
       block.appendChild(tr);
     });
+    const dirRow = document.createElement('div');
+    dirRow.className = 'bay-dir-row';
+    dirRow.innerHTML = `<span class="bay-dir-label">Bay 1 (trong)</span><div class="bay-dir-arrow"></div><span class="bay-dir-label">Bay ${CFG.bays} (ngoài)</span>`;
+    block.appendChild(dirRow);
     el.appendChild(block);
   });
 }
@@ -777,7 +910,152 @@ function showMsg(el, type, text) {
   el._t = setTimeout(() => { el.style.display = 'none'; el.className = 'msg'; }, 4000);
 }
 
-function toast(msg) {
+// ========================
+// QUICK-ADD (tap empty bay)
+// ========================
+let qaddKey = null;
+
+function openQAdd(row, tier, bay) {
+  qaddKey = `${row}-${tier}-${bay}`;
+  document.getElementById('qadd-loc').textContent = `Dãy ${row} — Tầng ${tier} — Bay ${bay}`;
+  document.getElementById('qa-id').value = '';
+  document.getElementById('qa-cust').value = '';
+  const msg = document.getElementById('qadd-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  document.getElementById('qadd-bg').classList.add('open');
+  setTimeout(() => document.getElementById('qa-id').focus(), 200);
+}
+
+function closeQAdd() {
+  document.getElementById('qadd-bg').classList.remove('open');
+  qaddKey = null;
+}
+
+document.getElementById('qadd-bg').addEventListener('click', e => {
+  if (e.target === document.getElementById('qadd-bg')) closeQAdd();
+});
+
+function confirmQAdd() {
+  const id = document.getElementById('qa-id').value.trim().toUpperCase();
+  const type = document.getElementById('qa-type').value;
+  const cond = document.getElementById('qa-cond').value;
+  const cust = document.getElementById('qa-cust').value.trim();
+  const msg = document.getElementById('qadd-msg');
+  if (!id) { showMsg(msg, 'err', 'Vui lòng nhập số container.'); return; }
+  if (!/^[A-Z]{4}\d{7}$/.test(id)) { showMsg(msg, 'err', 'Định dạng không đúng (VD: TCKU1234567)'); return; }
+  if (!qaddKey) return;
+  if (containers[qaddKey]) { showMsg(msg, 'err', 'Vị trí này đã có container!'); return; }
+  if (Object.values(containers).find(c => c.id === id)) { showMsg(msg, 'err', `${id} đã tồn tại trong depot`); return; }
+  const [row, tier, bay] = qaddKey.split('-');
+  containers[qaddKey] = { id, type, cond, row, tier: +tier, bay: +bay, cust, note: '' };
+  addLog('in', containers[qaddKey], row, tier, bay);
+  saveLocal();
+  pushData();
+  render();
+  closeQAdd();
+  toast(`✓ Đã nhập ${id} — Dãy ${row}, T${tier}, B${bay}`);
+}
+
+// ========================
+// OCR — CAMERA + TESSERACT
+// ========================
+let ocrTargetId = null;
+let ocrStream = null;
+let tesseractReady = false;
+let tesseractWorker = null;
+
+async function loadTesseract() {
+  if (tesseractReady) return true;
+  if (!window.Tesseract) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  tesseractWorker = await Tesseract.createWorker('eng', 1, {
+    logger: () => {}
+  });
+  await tesseractWorker.setParameters({
+    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+    tessedit_pageseg_mode: '7'
+  });
+  tesseractReady = true;
+  return true;
+}
+
+async function startOCR(targetInputId) {
+  ocrTargetId = targetInputId;
+  const statusId = targetInputId === 'i-id' ? 'ocr-status-main' : 'ocr-status-qa';
+  const statusEl = document.getElementById(statusId);
+  if (statusEl) statusEl.textContent = '';
+
+  try {
+    ocrStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    document.getElementById('ocr-video').srcObject = ocrStream;
+    document.getElementById('ocr-overlay').classList.add('open');
+  } catch (e) {
+    toast('Không truy cập được camera. Kiểm tra quyền trình duyệt.');
+  }
+}
+
+function stopOCR() {
+  if (ocrStream) { ocrStream.getTracks().forEach(t => t.stop()); ocrStream = null; }
+  document.getElementById('ocr-overlay').classList.remove('open');
+  document.getElementById('btn-capture').textContent = '📷 Chụp & nhận diện';
+  document.getElementById('btn-capture').disabled = false;
+}
+
+async function captureOCR() {
+  const btn = document.getElementById('btn-capture');
+  btn.textContent = '⏳ Đang nhận diện...';
+  btn.disabled = true;
+
+  const video = document.getElementById('ocr-video');
+  const canvas = document.getElementById('ocr-canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  // Pre-process: crop middle horizontal band where container ID typically appears
+  const cropY = Math.floor(canvas.height * 0.3);
+  const cropH = Math.floor(canvas.height * 0.4);
+  const imgData = ctx.getImageData(0, cropY, canvas.width, cropH);
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = canvas.width; cropCanvas.height = cropH;
+  cropCanvas.getContext('2d').putImageData(imgData, 0, 0);
+
+  try {
+    await loadTesseract();
+    const { data: { text } } = await tesseractWorker.recognize(cropCanvas);
+    // Find ISO container number: 4 uppercase letters + 7 digits (with possible space before check digit)
+    const raw = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const match = raw.match(/[A-Z]{4}\d{7}/);
+    if (match) {
+      stopOCR();
+      const targetInput = document.getElementById(ocrTargetId);
+      if (targetInput) targetInput.value = match[0];
+      const statusId = ocrTargetId === 'i-id' ? 'ocr-status-main' : 'ocr-status-qa';
+      const statusEl = document.getElementById(statusId);
+      if (statusEl) statusEl.textContent = `✓ Nhận diện: ${match[0]}`;
+      toast(`✓ OCR: ${match[0]}`);
+    } else {
+      btn.textContent = '📷 Chụp lại';
+      btn.disabled = false;
+      toast('Không nhận diện được — thử lại, đảm bảo đủ sáng');
+    }
+  } catch(e) {
+    btn.textContent = '📷 Chụp lại';
+    btn.disabled = false;
+    toast('Lỗi OCR: ' + (e.message || 'thử lại'));
+  }
+}
+
+
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
