@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Depot">
+<meta name="theme-color" content="#185FA5">
+<title>Depot Container Manager</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --blue: #185FA5;
+    --blue-d: #0C447C;
+    --blue-l: #E6F1FB;
+    --green: #0F6E56;
+    --green-l: #E1F5EE;
+    --red: #A32D2D;
+    --red-l: #FCEBEB;
+    --amber: #854F0B;
+    --amber-l: #FAEEDA;
+    --gray: #5F5E5A;
+    --gray-l: #F1EFE8;
+    --border: #d8d6cf;
+    --text: #1a1a18;
+    --text2: #5F5E5A;
+    --bg: #f5f4f0;
+    --white: #ffffff;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; }
+
+  /* === APP SHELL === */
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  #topbar { background: var(--blue); color: #fff; padding: 14px 16px 12px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  #topbar h1 { font-size: 17px; font-weight: 600; flex: 1; }
+  #topbar .sync-btn { background: rgba(255,255,255,0.18); border: none; color: #fff; border-radius: 20px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  #sync-status { font-size: 11px; opacity: 0.8; }
+  #content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #navbar { background: var(--white); border-top: 1px solid var(--border); display: flex; flex-shrink: 0; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 4px 12px; border: none; background: none; color: var(--text2); font-size: 10px; cursor: pointer; transition: color .15s; }
+  .nav-item svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-item.active { color: var(--blue); }
+  .nav-item.active svg { stroke: var(--blue); }
+
+  /* === PANELS === */
+  .panel { display: none; padding: 16px; }
+  .panel.active { display: block; }
+
+  /* === STATS === */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: var(--white); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+  .stat-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+  .stat-value { font-size: 26px; font-weight: 700; }
+  .stat-value.blue { color: var(--blue); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.amber { color: var(--amber); }
+
+  /* === SECTION HEADER === */
+  .section-hd { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
+
+  /* === DEPOT MAP === */
+  .row-block { background: var(--white); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .row-label { font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+  .tier-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .tier-lbl { font-size: 11px; color: var(--text2); width: 36px; flex-shrink: 0; }
+  .bays { display: flex; gap: 5px; flex-wrap: wrap; }
+  .bay { width: 44px; height: 38px; border-radius: 6px; border: 1px solid var(--border); background: var(--gray-l); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; color: var(--text2); cursor: default; }
+  .bay.occ { background: var(--blue-l); border-color: #85B7EB; color: var(--blue-d); cursor: pointer; font-size: 9px; font-weight: 600; }
+  .bay.occ:active { background: #85B7EB; }
+  .bay.sel { background: var(--blue); color: #fff; border-color: var(--blue-d); }
+  .bay-num { font-size: 8px; opacity: 0.6; }
+
+  /* === MODAL === */
+  #modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: flex-end; justify-content: center; }
+  #modal-bg.open { display: flex; }
+  #modal { background: var(--white); width: 100%; max-width: 520px; border-radius: 20px 20px 0 0; padding: 20px 20px 32px; }
+  .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 16px; }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom: 16px; }
+  .info-row label { font-size: 11px; color: var(--text2); display: block; }
+  .info-row span { font-size: 14px; font-weight: 500; }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns button { flex: 1; padding: 13px; border-radius: var(--radius-sm); border: none; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .btn-out { background: var(--red); color: #fff; }
+  .btn-cancel { background: var(--gray-l); color: var(--text); }
+
+  /* === FORM PANELS === */
+  .form-card { background: var(--white); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .form-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+  .field { margin-bottom: 14px; }
+  .field label { font-size: 12px; color: var(--text2); font-weight: 500; display: block; margin-bottom: 6px; }
+  .field input, .field select { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--bg); color: var(--text); appearance: none; -webkit-appearance: none; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--blue); background: var(--white); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .btn-primary { width: 100%; padding: 14px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+  .btn-primary:active { background: var(--blue-d); }
+  .btn-primary.green { background: var(--green); }
+  .btn-primary.green:active { background: #085041; }
+  .msg { padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 10px; display: none; }
+  .msg.ok { background: var(--green-l); color: var(--green); display: block; }
+  .msg.err { background: var(--red-l); color: var(--red); display: block; }
+
+  /* === QUICK OUT === */
+  .quick-box { background: var(--white); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .quick-box h3 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+  .quick-row { display: flex; gap: 8px; }
+  .quick-row input { flex: 1; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--bg); text-transform: uppercase; }
+  .quick-row input:focus { outline: none; border-color: var(--blue); background: var(--white); }
+  .btn-out-q { padding: 12px 18px; background: var(--red); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+
+  /* === SEARCH === */
+  .search-wrap { position: relative; margin-bottom: 12px; }
+  .search-wrap input { width: 100%; padding: 12px 14px 12px 40px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--white); }
+  .search-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; stroke: var(--text2); fill: none; stroke-width: 2; stroke-linecap: round; }
+  .result-item { background: var(--white); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .result-id { font-size: 14px; font-weight: 700; }
+  .result-loc { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .btn-sm-out { padding: 8px 14px; background: var(--red); color: #fff; border: none; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+  /* === LOG === */
+  .log-item { background: var(--white); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 6px; display: flex; gap: 10px; align-items: flex-start; box-shadow: var(--shadow); }
+  .log-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 10px; flex-shrink: 0; margin-top: 1px; }
+  .log-badge.in { background: var(--green-l); color: var(--green); }
+  .log-badge.out { background: var(--red-l); color: var(--red); }
+  .log-text { font-size: 13px; flex: 1; }
+  .log-time { font-size: 11px; color: var(--text2); flex-shrink: 0; }
+
+  /* === SETTINGS === */
+  .settings-card { background: var(--white); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .settings-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 13px; }
+  .setting-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .setting-val { font-size: 13px; font-weight: 600; color: var(--blue); }
+
+  /* === TOAST === */
+  #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #1a1a18; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity .3s; pointer-events: none; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+
+  /* === SYNC OVERLAY === */
+  #sync-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 300; align-items: center; justify-content: center; flex-direction: column; gap: 12px; font-size: 14px; color: var(--text2); }
+  #sync-overlay.open { display: flex; }
+  .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* === CONFIG SCREEN === */
+  #config-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 400; padding: 24px 20px; overflow-y: auto; }
+  #config-screen.open { display: block; }
+  #config-screen h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  #config-screen p { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
+  .step-block { background: var(--white); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .step-num { display: inline-block; width: 22px; height: 22px; background: var(--blue); color: #fff; border-radius: 50%; font-size: 12px; font-weight: 700; text-align: center; line-height: 22px; margin-bottom: 8px; }
+  .step-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .step-body { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .step-body code { background: var(--gray-l); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--text); word-break: break-all; }
+  #script-url-input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--bg); margin: 10px 0; }
+  #script-url-input:focus { outline: none; border-color: var(--blue); background: var(--white); }
+</style>
+</head>
+<body>
+
+<!-- CONFIG SCREEN (first run) -->
+<div id="config-screen">
+  <h2>⚙️ Cài đặt lần đầu</h2>
+  <p>Để dữ liệu đồng bộ giữa các máy tính bảng, ứng dụng cần kết nối với Google Sheets qua Apps Script. Làm theo các bước bên dưới (chỉ cần làm 1 lần).</p>
+
+  <div class="step-block">
+    <div class="step-num">1</div>
+    <div class="step-title">Tạo Google Sheet mới</div>
+    <div class="step-body">Mở <strong>sheets.google.com</strong> → tạo bảng tính mới → đặt tên <em>"Depot Container"</em>. Đổi tên sheet đầu tiên thành <code>containers</code>.</div>
+  </div>
+
+  <div class="step-block">
+    <div class="step-num">2</div>
+    <div class="step-title">Tạo Apps Script</div>
+    <div class="step-body">Trong Google Sheet, vào menu <strong>Tiện ích mở rộng → Apps Script</strong>. Xoá code cũ, dán đoạn code dưới đây vào, nhấn <strong>Lưu</strong>:<br><br>
+    <code>function doGet(e){var ss=SpreadsheetApp.getActiveSpreadsheet();var sh=ss.getSheetByName('containers');var act=e.parameter.action;if(act==='load'){var data=sh.getDataRange().getValues();return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);}if(act==='save'){var rows=JSON.parse(e.parameter.data);sh.clearContents();rows.forEach(function(r){sh.appendRow(r);});return ContentService.createTextOutput('ok');}}  </code>
+    </div>
+  </div>
+
+  <div class="step-block">
+    <div class="step-num">3</div>
+    <div class="step-title">Deploy Web App</div>
+    <div class="step-body">Nhấn <strong>Deploy → New deployment</strong> → chọn loại <em>Web app</em> → Execute as: <em>Me</em> → Who has access: <em>Anyone</em> → Deploy → Copy URL dán vào ô bên dưới.</div>
+  </div>
+
+  <div class="step-block">
+    <div class="step-num">4</div>
+    <div class="step-title">Dán URL Apps Script</div>
+    <input id="script-url-input" type="url" placeholder="https://script.google.com/macros/s/..." />
+    <div class="step-body" style="margin-top:4px">Sau khi dán URL, nhấn nút bên dưới để kiểm tra kết nối.</div>
+  </div>
+
+  <button class="btn-primary" onclick="saveConfig()" style="margin-top:4px">Lưu & Kiểm tra kết nối</button>
+  <div id="config-msg" class="msg"></div>
+  <br>
+  <button class="btn-primary" style="background:var(--gray);margin-top:8px" onclick="skipConfig()">Dùng offline (không đồng bộ)</button>
+</div>
+
+<!-- SYNC OVERLAY -->
+<div id="sync-overlay">
+  <div class="spinner"></div>
+  <span>Đang đồng bộ...</span>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- MODAL -->
+<div id="modal-bg">
+  <div id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title">Chi tiết container</div>
+    <div class="info-grid" id="modal-info"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">Đóng</button>
+      <button class="btn-out" id="modal-out-btn">Lấy ra ngoài</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app">
+  <div id="topbar">
+    <h1>📦 Depot Manager</h1>
+    <span id="sync-status">Offline</span>
+    <button class="sync-btn" onclick="syncData()">⟳ Sync</button>
+  </div>
+
+  <div id="content">
+
+    <!-- MAP PANEL -->
+    <div id="panel-map" class="panel active">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Tổng container</div><div class="stat-value blue" id="st-total">0</div></div>
+        <div class="stat-card"><div class="stat-label">Công suất</div><div class="stat-value green" id="st-pct">0%</div></div>
+        <div class="stat-card"><div class="stat-label">Slots đã dùng</div><div class="stat-value blue" id="st-occ">0</div></div>
+        <div class="stat-card"><div class="stat-label">Slots trống</div><div class="stat-value amber" id="st-free">0</div></div>
+      </div>
+      <div class="section-hd">Sơ đồ depot — nhấn vào container để xem</div>
+      <div id="depot-map"></div>
+    </div>
+
+    <!-- OUT PANEL -->
+    <div id="panel-out" class="panel">
+      <div class="quick-box">
+        <h3>Lấy container ra — nhập số container</h3>
+        <div class="quick-row">
+          <input type="text" id="q-id" placeholder="VD: TCKU1234567" oninput="this.value=this.value.toUpperCase()">
+          <button class="btn-out-q" onclick="quickOut()">Lấy ra</button>
+        </div>
+        <div id="q-msg" class="msg"></div>
+      </div>
+
+      <div class="form-card">
+        <h3>Hoặc chọn vị trí thủ công</h3>
+        <div class="field-row-3">
+          <div class="field">
+            <label>Dãy</label>
+            <select id="o-row" onchange="refreshOBay()">
+              <option value="">-- Dãy --</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Tầng</label>
+            <select id="o-tier" onchange="refreshOBay()">
+              <option value="">-- Tầng --</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Bay</label>
+            <select id="o-bay">
+              <option value="">-- Bay --</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-primary" style="background:var(--red)" onclick="manualOut()">Xác nhận lấy ra</button>
+        <div id="o-msg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- IN PANEL -->
+    <div id="panel-in" class="panel">
+      <div class="form-card">
+        <h3>Nhập container vào depot</h3>
+        <div class="field">
+          <label>Số container *</label>
+          <input type="text" id="i-id" placeholder="TCKU1234567" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Loại container</label>
+            <select id="i-type">
+              <option>20'DC</option>
+              <option>40'DC</option>
+              <option>40'HC</option>
+              <option>45'HC</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Tình trạng</label>
+            <select id="i-cond">
+              <option>Empty</option>
+              <option>Full</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row-3">
+          <div class="field">
+            <label>Dãy *</label>
+            <select id="i-row">
+              <option value="">-- Dãy --</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Tầng *</label>
+            <select id="i-tier">
+              <option value="">-- Tầng --</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Bay *</label>
+            <select id="i-bay">
+              <option value="">-- Bay --</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Khách hàng</label>
+          <input type="text" id="i-cust" placeholder="Tên công ty...">
+        </div>
+        <div class="field">
+          <label>Ghi chú</label>
+          <input type="text" id="i-note" placeholder="Tuỳ chọn...">
+        </div>
+        <button class="btn-primary green" onclick="addContainer()">✓ Nhập vào depot</button>
+        <div id="i-msg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- SEARCH PANEL -->
+    <div id="panel-search" class="panel">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="s-q" placeholder="Tìm số container, khách hàng, dãy..." oninput="doSearch()">
+      </div>
+      <div id="s-results"></div>
+    </div>
+
+    <!-- LOG PANEL -->
+    <div id="panel-log" class="panel">
+      <div class="section-hd">Lịch sử thao tác hôm nay</div>
+      <div id="log-list"></div>
+    </div>
+
+  </div><!-- /content -->
+
+  <nav id="navbar">
+    <button class="nav-item active" onclick="switchPanel('map',this)">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Sơ đồ
+    </button>
+    <button class="nav-item" onclick="switchPanel('out',this)">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Lấy ra
+    </button>
+    <button class="nav-item" onclick="switchPanel('in',this)">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Nhập vào
+    </button>
+    <button class="nav-item" onclick="switchPanel('search',this)">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Tìm
+    </button>
+    <button class="nav-item" onclick="switchPanel('log',this)">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Lịch sử
+    </button>
+  </nav>
+</div>
+
+<script>
+// ========================
+// CONFIG
+// ========================
+const CFG = {
+  rows: ['A','B','C','D','E'],
+  tiers: [1,2,3],
+  bays: 10
+};
+
+let containers = {}; // key: "A-1-3" => {id,type,cond,row,tier,bay,cust,note}
+let logs = [];
+let SCRIPT_URL = '';
+let selectedKey = null;
+
+// ========================
+// INIT
+// ========================
+window.addEventListener('load', () => {
+  SCRIPT_URL = localStorage.getItem('depot_script_url') || '';
+  const saved = localStorage.getItem('depot_containers');
+  if (saved) containers = JSON.parse(saved);
+  const savedLogs = localStorage.getItem('depot_logs');
+  if (savedLogs) logs = JSON.parse(savedLogs);
+
+  initSelects();
+  render();
+
+  if (!localStorage.getItem('depot_configured')) {
+    document.getElementById('config-screen').classList.add('open');
+  } else {
+    document.getElementById('sync-status').textContent = SCRIPT_URL ? '☁ Cloud' : '📱 Offline';
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+});
+
+// ========================
+// CONFIG
+// ========================
+function saveConfig() {
+  const url = document.getElementById('script-url-input').value.trim();
+  const msg = document.getElementById('config-msg');
+  if (!url || !url.startsWith('https://script.google.com')) {
+    msg.className = 'msg err';
+    msg.textContent = 'URL không hợp lệ. Vui lòng kiểm tra lại.';
+    return;
+  }
+  SCRIPT_URL = url;
+  localStorage.setItem('depot_script_url', url);
+  localStorage.setItem('depot_configured', '1');
+  msg.className = 'msg ok';
+  msg.textContent = 'Đang kiểm tra kết nối...';
+  fetch(SCRIPT_URL + '?action=load')
+    .then(r => r.json())
+    .then(() => {
+      msg.textContent = '✓ Kết nối thành công!';
+      setTimeout(() => {
+        document.getElementById('config-screen').classList.remove('open');
+        document.getElementById('sync-status').textContent = '☁ Cloud';
+        syncData();
+      }, 1000);
+    })
+    .catch(() => {
+      msg.className = 'msg err';
+      msg.textContent = 'Không kết nối được. Kiểm tra URL và quyền deploy.';
+    });
+}
+
+function skipConfig() {
+  localStorage.setItem('depot_configured', '1');
+  document.getElementById('config-screen').classList.remove('open');
+  document.getElementById('sync-status').textContent = '📱 Offline';
+}
+
+// ========================
+// SYNC
+// ========================
+function syncData() {
+  if (!SCRIPT_URL) { toast('Chưa cấu hình Google Sheets'); return; }
+  showSyncOverlay(true);
+  fetch(SCRIPT_URL + '?action=load')
+    .then(r => r.json())
+    .then(rows => {
+      containers = {};
+      rows.forEach(r => {
+        if (r[0] === 'ID' || !r[0]) return;
+        const key = `${r[1]}-${r[2]}-${r[3]}`;
+        containers[key] = { id: r[0], row: r[1], tier: r[2], bay: r[3], type: r[4], cond: r[5], cust: r[6], note: r[7] };
+      });
+      saveLocal();
+      render();
+      showSyncOverlay(false);
+      toast('Đồng bộ thành công');
+    })
+    .catch(() => { showSyncOverlay(false); toast('Lỗi kết nối, dùng dữ liệu offline'); });
+}
+
+function pushData() {
+  if (!SCRIPT_URL) return;
+  const rows = [['ID','Row','Tier','Bay','Type','Cond','Customer','Note']];
+  Object.values(containers).forEach(c => rows.push([c.id,c.row,c.tier,c.bay,c.type,c.cond,c.cust||'',c.note||'']));
+  fetch(SCRIPT_URL + '?action=save&data=' + encodeURIComponent(JSON.stringify(rows))).catch(()=>{});
+}
+
+function showSyncOverlay(v) {
+  document.getElementById('sync-overlay').classList.toggle('open', v);
+}
+
+// ========================
+// LOCAL STORAGE
+// ========================
+function saveLocal() {
+  localStorage.setItem('depot_containers', JSON.stringify(containers));
+  localStorage.setItem('depot_logs', JSON.stringify(logs.slice(0, 200)));
+}
+
+// ========================
+// SELECTS INIT
+// ========================
+function initSelects() {
+  ['i-row','o-row'].forEach(id => {
+    const el = document.getElementById(id);
+    CFG.rows.forEach(r => el.insertAdjacentHTML('beforeend', `<option value="${r}">Dãy ${r}</option>`));
+  });
+  ['i-tier','o-tier'].forEach(id => {
+    const el = document.getElementById(id);
+    CFG.tiers.forEach(t => el.insertAdjacentHTML('beforeend', `<option value="${t}">Tầng ${t}</option>`));
+  });
+  const ib = document.getElementById('i-bay');
+  for (let b = 1; b <= CFG.bays; b++) ib.insertAdjacentHTML('beforeend', `<option value="${b}">Bay ${b}</option>`);
+}
+
+function refreshOBay() {
+  const row = document.getElementById('o-row').value;
+  const tier = document.getElementById('o-tier').value;
+  const el = document.getElementById('o-bay');
+  el.innerHTML = '<option value="">-- Bay --</option>';
+  if (!row || !tier) return;
+  for (let b = 1; b <= CFG.bays; b++) {
+    const k = `${row}-${tier}-${b}`;
+    if (containers[k]) {
+      el.insertAdjacentHTML('beforeend', `<option value="${b}">Bay ${b} — ${containers[k].id}</option>`);
+    }
+  }
+}
+
+// ========================
+// RENDER
+// ========================
+function render() {
+  renderMap();
+  renderLog();
+  updateStats();
+}
+
+function updateStats() {
+  const total = Object.keys(containers).length;
+  const maxSlots = CFG.rows.length * CFG.tiers.length * CFG.bays;
+  document.getElementById('st-total').textContent = total;
+  document.getElementById('st-occ').textContent = total;
+  document.getElementById('st-free').textContent = maxSlots - total;
+  document.getElementById('st-pct').textContent = Math.round(total / maxSlots * 100) + '%';
+}
+
+function renderMap() {
+  const el = document.getElementById('depot-map');
+  el.innerHTML = '';
+  CFG.rows.forEach(row => {
+    const block = document.createElement('div');
+    block.className = 'row-block';
+    block.innerHTML = `<div class="row-label">Dãy ${row}</div>`;
+    [...CFG.tiers].reverse().forEach(tier => {
+      const tr = document.createElement('div');
+      tr.className = 'tier-row';
+      tr.innerHTML = `<div class="tier-lbl">T${tier}</div>`;
+      const bays = document.createElement('div');
+      bays.className = 'bays';
+      for (let b = 1; b <= CFG.bays; b++) {
+        const k = `${row}-${tier}-${b}`;
+        const c = containers[k];
+        const div = document.createElement('div');
+        div.className = c ? 'bay occ' : 'bay';
+        if (k === selectedKey) div.classList.add('sel');
+        if (c) {
+          div.innerHTML = `<span>${c.id.slice(-4)}</span><span class="bay-num">B${b}</span>`;
+          div.onclick = () => openModal(k);
+        } else {
+          div.innerHTML = `<span class="bay-num">B${b}</span>`;
+        }
+        bays.appendChild(div);
+      }
+      tr.appendChild(bays);
+      block.appendChild(tr);
+    });
+    el.appendChild(block);
+  });
+}
+
+function renderLog() {
+  const el = document.getElementById('log-list');
+  if (!logs.length) { el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:24px">Chưa có thao tác nào hôm nay.</div>'; return; }
+  el.innerHTML = logs.map(l => `
+    <div class="log-item">
+      <span class="log-badge ${l.type}">${l.type === 'in' ? 'NHẬP' : 'LẤY RA'}</span>
+      <div class="log-text">${l.id}<br><span style="color:var(--text2);font-size:11px">Dãy ${l.row} — Tầng ${l.tier} — Bay ${l.bay}${l.cust ? ' | ' + l.cust : ''}</span></div>
+      <span class="log-time">${l.time}</span>
+    </div>`).join('');
+}
+
+// ========================
+// MODAL
+// ========================
+function openModal(key) {
+  selectedKey = key;
+  const c = containers[key];
+  if (!c) return;
+  const [row, tier, bay] = key.split('-');
+  document.getElementById('modal-title').textContent = c.id;
+  document.getElementById('modal-info').innerHTML = `
+    <div class="info-row"><label>Vị trí</label><span>Dãy ${row} — T${tier} — B${bay}</span></div>
+    <div class="info-row"><label>Loại</label><span>${c.type || '—'}</span></div>
+    <div class="info-row"><label>Tình trạng</label><span>${c.cond || '—'}</span></div>
+    <div class="info-row"><label>Khách hàng</label><span>${c.cust || '—'}</span></div>
+    ${c.note ? `<div class="info-row" style="grid-column:span 2"><label>Ghi chú</label><span>${c.note}</span></div>` : ''}
+  `;
+  document.getElementById('modal-out-btn').onclick = () => { confirmOut(key); };
+  document.getElementById('modal-bg').classList.add('open');
+  renderMap();
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('open');
+  selectedKey = null;
+  renderMap();
+}
+
+document.getElementById('modal-bg').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-bg')) closeModal();
+});
+
+function confirmOut(key) {
+  const c = containers[key];
+  if (!c) return;
+  const [row, tier, bay] = key.split('-');
+  addLog('out', c, row, tier, bay);
+  delete containers[key];
+  saveLocal();
+  pushData();
+  render();
+  closeModal();
+  toast(`✓ Đã lấy ${c.id} ra`);
+}
+
+// ========================
+// QUICK OUT
+// ========================
+function quickOut() {
+  const id = document.getElementById('q-id').value.trim().toUpperCase();
+  const msg = document.getElementById('q-msg');
+  if (!id) { showMsg(msg, 'err', 'Vui lòng nhập số container.'); return; }
+  const found = Object.entries(containers).find(([k, v]) => v.id === id);
+  if (!found) { showMsg(msg, 'err', `Không tìm thấy ${id} trong depot.`); return; }
+  const [key, c] = found;
+  const [row, tier, bay] = key.split('-');
+  addLog('out', c, row, tier, bay);
+  delete containers[key];
+  saveLocal();
+  pushData();
+  render();
+  showMsg(msg, 'ok', `✓ Đã lấy ${id} ra — Dãy ${row}, Tầng ${tier}, Bay ${bay}`);
+  document.getElementById('q-id').value = '';
+}
+
+function manualOut() {
+  const row = document.getElementById('o-row').value;
+  const tier = document.getElementById('o-tier').value;
+  const bay = document.getElementById('o-bay').value;
+  const msg = document.getElementById('o-msg');
+  if (!row || !tier || !bay) { showMsg(msg, 'err', 'Chọn đủ Dãy, Tầng, Bay.'); return; }
+  const key = `${row}-${tier}-${bay}`;
+  const c = containers[key];
+  if (!c) { showMsg(msg, 'err', 'Vị trí này không có container.'); return; }
+  addLog('out', c, row, tier, bay);
+  delete containers[key];
+  saveLocal();
+  pushData();
+  render();
+  refreshOBay();
+  showMsg(msg, 'ok', `✓ Đã lấy ${c.id} ra khỏi Dãy ${row}, T${tier}, B${bay}`);
+}
+
+// ========================
+// ADD CONTAINER
+// ========================
+function addContainer() {
+  const id = document.getElementById('i-id').value.trim().toUpperCase();
+  const type = document.getElementById('i-type').value;
+  const cond = document.getElementById('i-cond').value;
+  const row = document.getElementById('i-row').value;
+  const tier = document.getElementById('i-tier').value;
+  const bay = document.getElementById('i-bay').value;
+  const cust = document.getElementById('i-cust').value.trim();
+  const note = document.getElementById('i-note').value.trim();
+  const msg = document.getElementById('i-msg');
+
+  if (!id || !row || !tier || !bay) { showMsg(msg, 'err', 'Điền đủ thông tin bắt buộc (*)'); return; }
+  if (!/^[A-Z]{4}\d{7}$/.test(id)) { showMsg(msg, 'err', 'Số container không đúng định dạng (VD: TCKU1234567)'); return; }
+
+  const key = `${row}-${tier}-${bay}`;
+  if (containers[key]) { showMsg(msg, 'err', `Vị trí Dãy ${row}, Tầng ${tier}, Bay ${bay} đã có container ${containers[key].id}`); return; }
+  if (Object.values(containers).find(c => c.id === id)) { showMsg(msg, 'err', `Container ${id} đã tồn tại trong depot`); return; }
+
+  containers[key] = { id, type, cond, row, tier, bay, cust, note };
+  addLog('in', containers[key], row, tier, bay);
+  saveLocal();
+  pushData();
+  render();
+  showMsg(msg, 'ok', `✓ Đã nhập ${id} vào Dãy ${row}, Tầng ${tier}, Bay ${bay}`);
+  document.getElementById('i-id').value = '';
+  document.getElementById('i-cust').value = '';
+  document.getElementById('i-note').value = '';
+}
+
+// ========================
+// SEARCH
+// ========================
+function doSearch() {
+  const q = document.getElementById('s-q').value.trim().toLowerCase();
+  const el = document.getElementById('s-results');
+  if (!q) { el.innerHTML = ''; return; }
+  const matches = Object.entries(containers).filter(([k, c]) =>
+    c.id.toLowerCase().includes(q) ||
+    (c.cust || '').toLowerCase().includes(q) ||
+    c.row.toLowerCase().includes(q) ||
+    (c.type || '').toLowerCase().includes(q)
+  );
+  if (!matches.length) { el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:24px">Không tìm thấy kết quả.</div>'; return; }
+  el.innerHTML = matches.map(([k, c]) => `
+    <div class="result-item">
+      <div>
+        <div class="result-id">${c.id}</div>
+        <div class="result-loc">Dãy ${c.row} — Tầng ${c.tier} — Bay ${c.bay} | ${c.type} ${c.cond}${c.cust ? ' | ' + c.cust : ''}</div>
+      </div>
+      <button class="btn-sm-out" onclick="confirmOutById('${c.id}')">Lấy ra</button>
+    </div>`).join('');
+}
+
+function confirmOutById(id) {
+  const found = Object.entries(containers).find(([k, v]) => v.id === id);
+  if (!found) return;
+  const [key, c] = found;
+  const [row, tier, bay] = key.split('-');
+  addLog('out', c, row, tier, bay);
+  delete containers[key];
+  saveLocal();
+  pushData();
+  render();
+  doSearch();
+  toast(`✓ Đã lấy ${id} ra`);
+}
+
+// ========================
+// LOG
+// ========================
+function addLog(type, c, row, tier, bay) {
+  const now = new Date();
+  const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  logs.unshift({ type, id: c.id, row, tier, bay, cust: c.cust || '', time });
+}
+
+// ========================
+// UI HELPERS
+// ========================
+function switchPanel(name, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'search') setTimeout(() => document.getElementById('s-q').focus(), 100);
+}
+
+function showMsg(el, type, text) {
+  el.className = 'msg ' + type;
+  el.textContent = text;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = 'none'; el.className = 'msg'; }, 4000);
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
