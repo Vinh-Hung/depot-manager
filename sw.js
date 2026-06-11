@@ -1,4 +1,4 @@
-const CACHE = 'depot-v8';
+const CACHE = 'depot-v9';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
